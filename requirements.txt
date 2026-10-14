@@ -1,13 +1,9 @@
+streamlit
 torch
 torchvision
 timm
 opencv-python-headless
-albumentations
-scikit-learn
-pandas
 numpy
+pillow
 matplotlib
-seaborn
-tqdm
-scipy
-streamlit
+scikit-learn
