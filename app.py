@@ -4,12 +4,10 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 import timm
-import matplotlib.pyplot as plt
-from PIL import Image
 import streamlit as st
 
 # ==============================================================================
-# 1. إعدادات الصفحة والتصميم العريض (UI Page Config)
+# 1. إعدادات الصفحة والتصميم (UI Page Config)
 # ==============================================================================
 st.set_page_config(
     page_title="Pneumonia Shortcut Learning Inspector",
@@ -18,17 +16,16 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# تحسين مظهر الواجهة عبر CSS مخصص
+# تحسين مظهر الواجهة عبر CSS مخصص (استخدام unsafe_allow_html=True بدلاً من unsafe_allow_dict)
 st.markdown("""
     <style>
     .main-title { font-size: 28px; font-weight: bold; color: #1A365D; text-align: center; margin-bottom: 5px; }
     .sub-title { font-size: 16px; color: #4A5568; text-align: center; margin-bottom: 25px; }
-    .metric-card { background-color: #F7FAFC; border: 1px solid #E2E8F0; padding: 15px; border-radius: 10px; text-align: center; }
     </style>
-""", unsafe_allow_dict=True)
+""", unsafe_allow_html=True)
 
-st.markdown('<div class="main-title">🫁 Pneumonia Shortcut Learning & Attribution Leakage Inspector</div>', unsafe_allow_dict=True)
-st.markdown('<div class="sub-title">Anatomical Probing & Diagnostic Reliability Assessment Platform</div>', unsafe_allow_dict=True)
+st.markdown('<div class="main-title">🫁 Pneumonia Shortcut Learning & Attribution Leakage Inspector</div>', unsafe_allow_html=True)
+st.markdown('<div class="sub-title">Anatomical Probing & Diagnostic Reliability Assessment Platform</div>', unsafe_allow_html=True)
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -36,11 +33,8 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 # 2. تحميل النموذج (Model Loader)
 # ==============================================================================
 @st.cache_resource
-def load_trained_model(model_name='resnet18', weights_path=None):
+def load_trained_model(model_name='resnet18'):
     model = timm.create_model(model_name, pretrained=True, num_classes=2)
-    if weights_path and os.path.exists(weights_path):
-        state_dict = torch.load(weights_path, map_location=device)
-        model.load_state_dict(state_dict)
     model.to(device)
     model.eval()
     return model
@@ -71,20 +65,20 @@ st.sidebar.info("""
 # ==============================================================================
 # 4. معالجة وحساب خريطة Grad-CAM و BAR Score
 # ==============================================================================
-def process_and_predict(image_bytes, mode, model_variant):
+def process_and_predict(uploaded_file, mode, model_variant):
     # قراءة الصورة
-    file_bytes = np.asarray(bytearray(image_bytes.read()), dtype=uint8)
+    file_bytes = np.asarray(bytearray(uploaded_file.read()), dtype=np.uint8)
     raw_img = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
     raw_img = cv2.cvtColor(raw_img, cv2.COLOR_BGR2RGB)
     raw_img = cv2.resize(raw_img, (224, 224))
 
-    # استخراج قناع تقريبي للرئة للإنتاج التفاعلي (Thresh-based mask)
+    # استخراج قناع تقريبي للرئة
     gray = cv2.cvtColor(raw_img, cv2.COLOR_RGB2GRAY)
     _, thresh = cv2.threshold(gray, 40, 255, cv2.THRESH_BINARY)
     mask = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, np.ones((5,5), np.uint8))
     mask_3ch = (cv2.cvtColor(mask, cv2.COLOR_GRAY2BGR) / 255.0).astype(np.float32)
 
-    # تطبيق نمط الفحص المختارات
+    # تطبيق نمط الفحص المختار
     if mode == "Lung-Only (Masked)":
         input_img = (raw_img * mask_3ch).astype(np.uint8)
     elif mode == "Background-Only (Occluded)":
@@ -98,8 +92,9 @@ def process_and_predict(image_bytes, mode, model_variant):
     std = torch.tensor([0.229, 0.224, 0.225]).view(3, 1, 1)
     tensor_img = ((tensor_img - mean) / std).unsqueeze(0).to(device)
 
-    # تحميل النموذج المناسب
-    model = load_trained_model('resnet18')
+    # تحميل النموذج
+    model_arch = 'densenet121' if 'DenseNet' in model_variant else 'resnet18'
+    model = load_trained_model(model_arch)
     
     # التنبؤ
     with torch.no_grad():
@@ -137,15 +132,15 @@ if uploaded_file is not None:
 
     with col1:
         st.subheader("1. Input CXR Image")
-        st.image(raw_img, use_column_width=True)
+        st.image(raw_img, use_container_width=True)
 
     with col2:
         st.subheader(f"2. {probing_mode}")
-        st.image(input_img, use_column_width=True)
+        st.image(input_img, use_container_width=True)
 
     with col3:
         st.subheader("3. Grad-CAM & Leakage")
-        st.image(overlay, use_column_width=True)
+        st.image(overlay, use_container_width=True)
 
     st.markdown("---")
     res_col1, res_col2, res_col3 = st.columns(3)
@@ -164,3 +159,4 @@ if uploaded_file is not None:
 
 else:
     st.info("👆 Please upload a Chest Radiograph image to run the diagnostic and probing analysis.")
+
